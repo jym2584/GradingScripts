@@ -36,21 +36,16 @@ class RepoHandler(Thread):
             self.rollback_repo(commit_hash) # rollback repo to commit hash
             
         except: # Catch exception raised and interrupt main thread
-            rev_list_process = subprocess.Popen(['git', 'log', '--reverse', '--date-order', '--date=local', '--max-parents=0' '--format=%cd'], cwd=self.__repo_path, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            rev_list_process = subprocess.Popen(['git', 'log', '--reverse', '--date-order', '--date=local', '--max-parents=0' '--pretty="format=%ci (%s by %cn)"'], cwd=self.__repo_path, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             line = None
-            try:
-                i = 0
-                for line in iter(rev_list_process.stdout.readline, b'\n'): # b'\n'-separated lines
-                    if (i == 1): # really terrible way of doing this, but this guarantees to grab the date 
-                        break
-                    line = line.decode().strip() # line is read in bytes. Decode to str
-            except:
-                pass
+
+            for line in iter(rev_list_process.stdout.readline, b'\n'): # b'\n'-separated lines
+                line = line.decode().strip() # line is read in bytes. Decode to str
             
             if re.match(r'^error:|^warning:|^fatal:', line):
                 print(f'  > {LIGHT_RED}Skipping `{self.__folder_name}`\n\t{line}. {WHITE}') # print error to end user
             else:
-                print(f'  > {LIGHT_RED}Skipping `{self.__folder_name}` because the hash is invalid (date is likely too far)\n\tOldest commit: {line}). {WHITE}') # print error to end user
+                print(f'  > {LIGHT_RED}Skipping `{self.__folder_name}` because the hash is invalid (date is likely too far)\n\tOldest commit: {line.split("Date:   ")[1]}. {WHITE}') # print error to end user
             logging.exception('ERROR:') # log error to log file (logging automatically is passed exception)
 
 
@@ -58,8 +53,16 @@ class RepoHandler(Thread):
         '''
         Get commit hash at timestamp and reset local repo to timestamp on the default branch
         '''
+        # git rev-parse --abbrev-ref origin/HEAD
+        get_default_branch = subprocess.Popen(['git', 'rev-parse', '--abbrev-ref', 'origin/HEAD'], cwd=self.__repo_path, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        with get_default_branch: # Read rev list output line by line to search for error or commit hash
+            for line in iter(get_default_branch.stdout.readline, b''): 
+                line = line.decode()
+                self.log_errors_given_line(line)
+                get_default_branch = line.strip() 
+
         # run process on system that executes 'git rev-list' command. stdout is redirected so it doesn't output to end user
-        rev_list_process = subprocess.Popen(['git', 'rev-list', '-n', '1', f'--before="{self.__date_due} {self.__time_due}"', f'origin/main'], cwd=self.__repo_path, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        rev_list_process = subprocess.Popen(['git', 'rev-list', '-n', '1', f'--before="{self.__date_due} {self.__time_due}"', f'{get_default_branch}'], cwd=self.__repo_path, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         with rev_list_process: # Read rev list output line by line to search for error or commit hash
             for line in iter(rev_list_process.stdout.readline, b''): # b'\n'-separated lines
                 line = line.decode()
