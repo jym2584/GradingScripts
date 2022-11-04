@@ -587,7 +587,12 @@ def main():
 
         if save_repo_stats:
             print(f'{LIGHT_GREEN}Found average lines per commit for {num_of_lines}/{len(repos)} repos.{WHITE}')
-
+        
+        try:
+            subprocess.Popen(f'code "{initial_path}"')
+            print(f"Opening `{initial_path}` to vscode")
+        except:
+            pass
     except FileNotFoundError as e: # If classroom roster file specified in config.txt isn't found.
         print()
         print(f'Classroom roster `{student_filename}` not found.')
